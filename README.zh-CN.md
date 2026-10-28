@@ -36,6 +36,35 @@
 图片上的框会被换算成原图坐标（`x / y / 宽 / 高` + 原图尺寸）一起发出去，模型拿着这组数就能自己把那一块裁出来看，不需要截图通道。
 Markdown、代码、CSV 的每个块都带 `data-ha-src="L12-L18"`，批注里会写出源码行号，不用再猜是哪一段。
 
+## 本 fork 的改动
+
+相对上游 `czxgg0630/dsh-html-annotate`（`0c94bfb`，v0.2.0），本 fork 多了**两个提交**（作者均为 daydream）：
+
+| 提交 | 内容 |
+| --- | --- |
+| `8bb18c5` | 可编辑的自定义选框：框画完后能拖动、八向缩放、方向键微调、删除 |
+| `298bd9f` | 多格式批注：Markdown / 代码 / CSV / SVG / 图片都能被框选和批注 |
+
+上面「特点」和「支持的文件格式」两节已经写了交互和格式本身，这里补的是范围、改到的文件和怎么验证。
+
+**提交一 `8bb18c5`——选框不再画完就定死**
+
+- `bridge.js`（+228 / −20）——`marquee` 选框层：虚线框 + `宽×高` 角标 + 框角 `×` + 八个手柄；`boxDrag` 管整框拖动和八向缩放（最小 8×8 px）；`keydown` 里接管方向键（1 px，`Shift` 10 px）和 `Delete`/`Backspace`；`drawMarquee()` 接进 `renderPinned`、滚动、`resize` 和 DOM 变化的重绘路径。
+- `client.js`（+36 / −2）——把页面传来的 `boxId` 带进草稿；`decideUpstream` 遇到同 `boxId` 的 `area` 消息就原地更新 `rect`/`items`，`note` 和 `styleTargets` 留着；同框的几何更新不走 5 条/秒的消息闸门（走了框会卡）；工具栏加 `⬚` 按钮和 `rect` 模式；补 `mode.rectTitle`、`aria.rect` 中英文案。
+- `test/client.test.cjs`（+31）——2 条新用例：同 `boxId` 拖动后备注和样式目标还在；换 `boxId` 仍算新选择、被「草稿已占用」挡住。
+
+**提交二 `298bd9f`——从「只能批注 HTML」到多格式**
+
+- `serve.js`（+335 / −24）——`docKind()` 按扩展名分类成 html / markdown / table / code / svg / image；自带极简 Markdown 渲染器（标题、段落、列表、引用、表格、围栏代码块、行内格式），每个块带 `data-ha-src="L起-L止"`；代码与纯文本渲染成带行号的代码页，一行一块；CSV/TSV 解析成表格（处理引号与转义），JSON 自动格式化；SVG 内联、图形元素可逐个点选；图片包进壳、本体走 `?raw=1` 直出（带 `Access-Control-Allow-Origin`）；新增 `shellHtml()` 统一外壳，浅色/深色跟随系统。
+- `bridge.js`（+54）——`describe()` 上报 `data-ha-src`，批注里写出源码行号；框压在 `<img>` 上时按显示比例换算成原图像素矩形（`x / y / 宽 / 高` + 原图尺寸）。
+- `client.js`（+81）——tab 匹配扩展到 50+ 个扩展名；元素 / 元素组 / 区域项都带源码行号，图片区域额外写一行裁剪框与原图尺寸；图片裁剪矩形经 `cleanImage()` 收敛，不合法整块丢弃。
+- `test/serve.test.cjs`（+51）——新增多格式路由用例。合计 serve 9 项、client 47 项、桥脚本浏览器端 17 项，全过。
+
+**装法与验证**
+
+- 装：`dsh plugin --profile web add github:daydream-wjh/dsh-html-annotate`（tarball 和本地绝对路径两种方式见上面「安装」）。装完重启该 profile、刷新浏览器，tab 和工具栏才会出现。
+- 离线测试：`node --test test/`（两套件）。
+- 手测：按上面「验证」的 5 步走完，再补两条——① 画框后拖动、拉角、按方向键、按 `Delete`，确认草稿里的备注和样式目标没被冲掉；② 打开一个 `.md` 或 `.csv`，确认能框到带行号的块。
 
 在 DSH 会话里打开一个本地 `.html`，右侧栏就能看到预览。点选元素、按住 `Ctrl/Cmd` 点一组、或者 `Shift`+拖动框一块区域，选中的东西会作为一条普通的用户消息发进当前会话：文件路径、每个元素的选择器、元素文字、它现在的样式、你想让它变成的样式，都在里面。
 

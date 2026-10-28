@@ -21,6 +21,56 @@
 
 ---
 
+## 本 fork 的改动 / What this fork adds
+
+相对上游 `czxgg0630/dsh-html-annotate`（`0c94bfb`，v0.2.0），本 fork 多了**两个提交**：
+
+| 提交 | 内容 |
+| --- | --- |
+| `8bb18c5` | 可编辑的自定义选框：拖动、八向缩放、方向键微调、删除 |
+| `298bd9f` | 多格式批注：Markdown / 代码 / CSV / SVG / 图片都能被框选 |
+
+上游文档正文未改，多出来的就是下面这些。第一节写第一个提交（选框），第二节写第二个提交（多格式）。
+
+- **选框画完还能改**：`Shift`+拖动，或工具栏新增的 `⬚`（框选模式）拉出的区域不再是死框。整框可拖动；八个手柄（`nw / n / ne / e / se / s / sw / w`）改大小，最小 8×8 px；方向键微调 1 px、`Shift`+方向键 10 px；`Delete` / `Backspace` 或框角的 `×` 删除，删除时一并清掉外层草稿。
+- **改动后按新几何重采样**：拖动 / 缩放 / 微调都会用新 `rect` 重新 `collectArea()`，并用 `requestAnimationFrame` 合帧，`mouseup` 与按键时各 `flush` 一次，不会每帧发消息。
+- **同一个框不丢已写内容**：每个框带一个 `boxId`，客户端 `decideUpstream` 认到同 `boxId` 的 `area` 消息就原地更新 `rect` / `items`，`note` 与 `styleTargets` 保留；换框仍按「草稿已占用」拒绝，并且会把上一条未发送的草稿先落盘。
+- **同框几何更新绕过消息限速**：否则拖动时每秒几十条更新会被闸门卡住，框会一卡一卡。
+- **框选模式下单击不拖不再误判**：保持原框，不当成点选元素。
+
+涉及的文件：
+
+| 文件 | 改动 |
+| --- | --- |
+| `bridge.js` | +228 / −20 行：`marquee` 选框层（虚线框、尺寸角标、`×` 按钮、八个手柄）、`boxDrag` 拖动/缩放、方向键与 `Delete` 处理、`drawMarquee()` 接进 `renderPinned` / `onScroll` / `resize` / DOM 变化的重绘路径；区域选框改由 `marquee` 绘制 |
+| `client.js` | +36 / −2 行：`boxId` 从页面透传到草稿、同框原地更新、几何更新绕过限速、工具栏 `⬚` 按钮与 `mode === 'rect'` 模式、`mode.rectTitle` / `aria.rect` 中英文案 |
+| `test/client.test.cjs` | +31 行：2 条新用例——同 `boxId` 拖动时保留备注与样式目标；不同 `boxId` 仍视为新选择被拒绝 |
+| `package.json` | `repository` / `homepage` / `bugs` 改指本 fork（`daydream-wjh/dsh-html-annotate`） |
+
+### 第二个提交 `298bd9f`——多格式批注
+
+| 文件 | 改动 |
+| --- | --- |
+| `serve.js` | +335 / −24 行：`docKind()` 按扩展名分成 html / markdown / table / code / svg / image；内置极简 Markdown 渲染器（标题、段落、列表、引用、表格、围栏代码块、行内格式），每块带 `data-ha-src="L起-L止"`；代码与纯文本渲染成带行号的代码页；CSV/TSV 解析成表格（处理引号与转义），JSON 自动格式化；SVG 内联、图形可逐个点选；图片本体走 `?raw=1` 直出并带 `Access-Control-Allow-Origin`；新增 `shellHtml()` 统一外壳，深浅色跟随系统 |
+| `bridge.js` | +54 行：`describe()` 上报 `data-ha-src`；框压在 `<img>` 上时按显示比例换算成原图像素矩形 |
+| `client.js` | +81 行：tab 匹配扩展到 50+ 个扩展名；元素 / 元素组 / 区域项都带源码行号，图片区域额外写裁剪框与原图尺寸；裁剪矩形经 `cleanImage()` 收敛 |
+| `test/serve.test.cjs` | +51 行：新增多格式路由用例。合计 serve 9 项、client 47 项、桥脚本 17 项全过 |
+| `locale/*.json`、`package.json` | 文案与仓库指向随多格式调整 |
+
+安装（本 fork 版）：
+
+```sh
+dsh plugin --profile web add github:daydream-wjh/dsh-html-annotate
+```
+
+装完重启该 profile 的 Harness 进程、刷新浏览器；打开一个 `.html`，按 `Shift` 拖出一个框，然后试拖动、拉角、方向键、`Delete`。离线跑测试：
+
+```sh
+node --test test/
+```
+
+---
+
 Open a local `.html` file inside a DeepSeek Harness session, preview it in the right sidebar, then click an element, Ctrl/Cmd-click a group, or Shift-drag a region. Whatever you pick lands in the current session as a normal user message carrying the file path, each element's selector, its text, the styles it currently has, and the styles you want it to have.
 
 The preview is a real page load from a read-only route on the local Harness server, not a `blob:` document, so links, `?query` strings and the page's own scripts keep working while you annotate.
