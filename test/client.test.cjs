@@ -547,3 +547,34 @@ test('locateAnnotations：入口页没有本地引用时不猜，直接返回空
   })
   assert.strictEqual(map.size, 0)
 })
+
+test('decideUpstream：同一个框被拖动/缩放时原地更新，保留备注与样式目标', () => {
+  const current = {
+    id: 'a1', kind: 'area', boxId: '3', note: '这里留白多一点',
+    items: [{ selector: '#a' }], rect: { x: 0, y: 0, width: 100, height: 80 },
+    styleTargets: { 'background-color': 'red' },
+  }
+  const moved = {
+    type: 'area', boxId: '3',
+    items: [{ selector: '#a' }, { selector: '#b' }],
+    rect: { x: 20, y: 20, width: 300, height: 200 },
+  }
+  const out = T().decideUpstream(current, moved, NOW)
+  assert.strictEqual(out.draft.id, 'a1', '不该换成新草稿')
+  assert.strictEqual(out.draft.rect.width, 300)
+  assert.strictEqual(out.draft.items.length, 2)
+  assert.strictEqual(out.draft.note, '这里留白多一点')
+  assert.deepStrictEqual(out.draft.styleTargets, { 'background-color': 'red' })
+  assert.strictEqual(out.toast, '')
+})
+
+test('decideUpstream：另一个框仍算新选择，草稿被占用时拒绝', () => {
+  const current = {
+    id: 'a1', kind: 'area', boxId: '3', note: 'x',
+    items: [], rect: { x: 0, y: 0, width: 5, height: 5 }, styleTargets: {},
+  }
+  const other = { type: 'area', boxId: '4', items: [], rect: { x: 1, y: 1, width: 9, height: 9 } }
+  const out = T().decideUpstream(current, other, NOW)
+  assert.strictEqual(out.draft, current, '换了框就是新选择，要守住已写内容')
+  assert.ok(out.toast)
+})

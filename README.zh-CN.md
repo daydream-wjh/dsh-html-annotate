@@ -10,6 +10,10 @@
 
 <p align="center">指到页面上的哪一块，就让 AI 改哪一块。指认结果组装成一条普通消息，发进当前会话。</p>
 
+> **本仓库是 [`czxgg0630/dsh-html-annotate`](https://github.com/czxgg0630/dsh-html-annotate) 的 fork**，在原版之上加了「可编辑的自定义选框」：框画完还能拖动、拉八个角改大小、方向键微调、`Delete` 删除；每次改动重新采样框内元素，已写的备注与样式目标不丢。
+>
+> 从本 fork 安装：`dsh plugin --profile <profile> add github:daydream-wjh/dsh-html-annotate`
+
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-0B7285?style=flat-square" alt="MIT license"></a>
   <img src="https://img.shields.io/badge/DSH-web-5B4CF0?style=flat-square" alt="DSH web">
@@ -25,6 +29,7 @@
 
 **特点**
 
+- **选框能自己改。** 工具栏 `⬚` 进框选模式（批注模式里 `Shift`+拖动同样是画框）。框画完不是定死的：整框可拖、八个角可拉大小、方向键微调（`Shift` 一次 10px）、`Delete` 或框角 `×` 删掉；每次改动都重新采样框内元素再报给会话，已经写好的备注和样式目标不会被冲掉。
 - **点选、多选、框选。** 三种指认方式：单个元素、`Ctrl/Cmd` 点选最多 24 个、`Shift` 拖动框出的区域会拆成区域内的元素。
 - **样式当目标写。** 字号、字重、文字颜色、背景色、圆角、内边距、宽度、高度八项；当前值以灰字占位，填了目标值，消息里就会写明从哪里改到哪里。
 - **能点的预览。** 相对链接、query 参数、CDN 上的样式和脚本都按原生方式加载；桥脚本会注入每一个 HTML 响应，所以页面里跳转之后批注也还在。

@@ -10,6 +10,10 @@
 
 <p align="center">Point at the part of an HTML page you want changed. Send that pointer to the current session as one ordinary message.</p>
 
+> **This repository is a fork of [`czxgg0630/dsh-html-annotate`](https://github.com/czxgg0630/dsh-html-annotate)** that adds an editable selection box: after drawing a region you can drag it, pull any of the eight handles to resize, nudge with the arrow keys, and delete it with `Delete`. Every change re-samples the elements inside while keeping the note and style targets you already wrote.
+>
+> Install from this fork: `dsh plugin --profile <profile> add github:daydream-wjh/dsh-html-annotate`
+
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-0B7285?style=flat-square" alt="MIT license"></a>
   <img src="https://img.shields.io/badge/DSH-web-5B4CF0?style=flat-square" alt="DSH web">
@@ -25,6 +29,7 @@ No screenshots. No "the card on the right, make it red". The model gets a select
 
 **Highlights**
 
+- **A box you can reshape.** The `⬚` tool (or `Shift`+drag in annotation mode) draws a region, and the box stays editable: drag the whole box, pull any of the eight handles to resize, nudge with the arrow keys (`Shift` = 10px), remove it with `Delete` or the `×` in the corner. Every change re-samples the elements inside and reports back, keeping any note and style targets you already wrote.
 - **Click, group, region.** Three ways to point: a single element, up to 24 elements with Ctrl/Cmd-click, or a dragged region sampled into its containing elements.
 - **Styles as targets.** Eight fields — font size, weight, text color, background, corner radius, padding, width, height. Current value shows as placeholder; fill one in and the message says where it is headed.
 - **A preview that still behaves like a page.** Relative links, query parameters, CDN styles and scripts load natively; the annotation bridge is injected into every HTML response, so it survives navigation inside the frame.

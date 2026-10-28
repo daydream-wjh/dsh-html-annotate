@@ -45,6 +45,165 @@ export function bridgeMain() {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount)
   else mount()
 
+  // ── 自定义选框 ────────────────────────────────────────────────
+  // Shift+拖动（或「框选」模式）拉出来的框不是画完就定死的：
+  // 框本身可以拖动、八个角可以拉大小、方向键微调、Delete 删掉，
+  // 每次改动都按新尺寸重新采样一遍框里的元素再报给外层。
+  const marquee = document.createElement('div')
+  marquee.setAttribute('data-ha-part', 'move')
+  marquee.style.cssText = 'position:fixed;display:none;box-sizing:border-box;border:1.5px dashed #4D6BFE;'
+    + 'background:rgba(77,107,254,.10);pointer-events:auto;cursor:move;touch-action:none;'
+  const marqueeTag = document.createElement('div')
+  marqueeTag.style.cssText = 'position:absolute;left:-2px;top:-20px;padding:2px 6px;border-radius:4px;'
+    + 'background:#4D6BFE;color:#fff;font:600 11px/1.3 system-ui,-apple-system,sans-serif;white-space:nowrap;pointer-events:none;'
+  const marqueeDel = document.createElement('div')
+  marqueeDel.setAttribute('data-ha-part', 'del')
+  marqueeDel.setAttribute('title', '删除选框 / Remove box')
+  marqueeDel.textContent = '×'
+  marqueeDel.style.cssText = 'position:absolute;right:-9px;top:-9px;width:18px;height:18px;border-radius:50%;'
+    + 'background:#fff;border:1.5px solid #4D6BFE;color:#4D6BFE;font:600 12px/15px system-ui,-apple-system,sans-serif;'
+    + 'text-align:center;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.25);box-sizing:border-box;'
+  const HANDLE_CSS = {
+    nw: 'left:-5px;top:-5px;cursor:nwse-resize;',
+    n: 'left:50%;top:-5px;margin-left:-5px;cursor:ns-resize;',
+    ne: 'right:-5px;top:-5px;cursor:nesw-resize;',
+    e: 'right:-5px;top:50%;margin-top:-5px;cursor:ew-resize;',
+    se: 'right:-5px;bottom:-5px;cursor:nwse-resize;',
+    s: 'left:50%;bottom:-5px;margin-left:-5px;cursor:ns-resize;',
+    sw: 'left:-5px;bottom:-5px;cursor:nesw-resize;',
+    w: 'left:-5px;top:50%;margin-top:-5px;cursor:ew-resize;',
+  }
+  Object.keys(HANDLE_CSS).forEach((dir) => {
+    const dot = document.createElement('div')
+    dot.setAttribute('data-ha-part', dir)
+    dot.style.cssText = 'position:absolute;width:10px;height:10px;border-radius:2px;background:#fff;'
+      + 'border:1.5px solid #4D6BFE;box-sizing:border-box;pointer-events:auto;' + HANDLE_CSS[dir]
+    marquee.appendChild(dot)
+  })
+  marquee.appendChild(marqueeTag)
+  marquee.appendChild(marqueeDel)
+  layer.appendChild(marquee)
+
+  let boxDrag = null
+  let boxSeq = 0
+  let areaFrame = 0
+  let areaDirty = false
+
+  function viewportRectOfBox() {
+    const item = pinned[0]
+    if (!item || !item.docRect) return null
+    return {
+      x: item.docRect.x - window.scrollX,
+      y: item.docRect.y - window.scrollY,
+      width: item.docRect.width,
+      height: item.docRect.height,
+    }
+  }
+
+  function drawMarquee() {
+    const rect = mode === 'idle' ? null : viewportRectOfBox()
+    if (!rect) {
+      marquee.style.display = 'none'
+      return
+    }
+    marquee.style.display = 'block'
+    marquee.style.left = `${Math.round(rect.x)}px`
+    marquee.style.top = `${Math.round(rect.y)}px`
+    marquee.style.width = `${Math.round(rect.width)}px`
+    marquee.style.height = `${Math.round(rect.height)}px`
+    marqueeTag.textContent = `${Math.round(rect.width)}×${Math.round(rect.height)}`
+  }
+
+  function currentBoxId() {
+    const item = pinned[0]
+    return item && item.docRect ? item.boxId || 0 : 0
+  }
+
+  function areaPayload(rect) {
+    return {
+      rect: {
+        x: Math.round(rect.x),
+        y: Math.round(rect.y),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      },
+      items: collectArea(rect),
+      boxId: currentBoxId(),
+    }
+  }
+
+  function flushArea() {
+    areaDirty = false
+    if (areaFrame) { window.cancelAnimationFrame(areaFrame); areaFrame = 0 }
+    const rect = viewportRectOfBox()
+    if (!rect || curBoxKind() !== 'area') return
+    send({ type: 'area', payload: areaPayload(rect) })
+  }
+
+  function curBoxKind() {
+    const item = pinned[0]
+    return item && item.docRect ? 'area' : ''
+  }
+
+  function scheduleArea() {
+    areaDirty = true
+    if (areaFrame) return
+    areaFrame = window.requestAnimationFrame(() => {
+      areaFrame = 0
+      if (!areaDirty) return
+      areaDirty = false
+      const rect = viewportRectOfBox()
+      if (!rect || curBoxKind() !== 'area') return
+      send({ type: 'area', payload: areaPayload(rect) })
+    })
+  }
+
+  function applyBoxRect(rect) {
+    pinned = [{
+      docRect: {
+        x: rect.x + window.scrollX,
+        y: rect.y + window.scrollY,
+        width: Math.max(8, rect.width),
+        height: Math.max(8, rect.height),
+      },
+      boxId: currentBoxId() || (boxSeq += 1),
+    }]
+    drawMarquee()
+    scheduleArea()
+  }
+
+  function clearBox(notify) {
+    boxDrag = null
+    pinned = []
+    pinnedLayer.textContent = ''
+    drawMarquee()
+    if (notify) {
+      draftSelector = null
+      send({ type: 'clear-draft' })
+    }
+  }
+
+  function updateBoxDrag(x, y) {
+    if (!boxDrag) return
+    const dx = x - boxDrag.sx
+    const dy = y - boxDrag.sy
+    const base = boxDrag.rect
+    const next = { x: base.x, y: base.y, width: base.width, height: base.height }
+    if (boxDrag.kind === 'move') {
+      next.x = base.x + dx
+      next.y = base.y + dy
+    } else {
+      const dir = boxDrag.dir
+      if (dir.indexOf('w') >= 0) { next.x = base.x + dx; next.width = base.width - dx }
+      if (dir.indexOf('e') >= 0) { next.width = base.width + dx }
+      if (dir.indexOf('n') >= 0) { next.y = base.y + dy; next.height = base.height - dy }
+      if (dir.indexOf('s') >= 0) { next.height = base.height + dy }
+      if (next.width < 8) { next.width = 8; if (dir.indexOf('w') >= 0) next.x = base.x + base.width - 8 }
+      if (next.height < 8) { next.height = 8; if (dir.indexOf('n') >= 0) next.y = base.y + base.height - 8 }
+    }
+    applyBoxRect(next)
+  }
+
   // 页面自己的脚本往往在 load 之后才把内容渲染出来（课程列表、图表都是 JS 填的）。
   // 标记如果只在收到消息时画一次，元素那时还不存在，就永远看不到框；所以盯住 DOM，变了一帧内重画。
   let markFrame = 0
@@ -54,6 +213,7 @@ export function bridgeMain() {
       markFrame = 0
       renderMarks()
       renderPinned()
+      drawMarquee()
       syncDraft()
     })
   }
@@ -240,28 +400,19 @@ export function bridgeMain() {
     return el ? describe(el) : null
   }
 
-  /** 把已定住的选框画出来：选中的元素跟着页面走，区域按文档坐标走。 */
+  /** 把已定住的选框画出来：选中的元素跟着页面走；区域选框由 marquee 自己画（可拖、可拉角）。 */
   function renderPinned() {
     pinnedLayer.textContent = ''
     pinned.forEach((item) => {
-      let rect = null
-      if (item.selector) {
-        const info = infoOf(item.selector)
-        if (info) rect = info.rect
-      } else if (item.docRect) {
-        rect = {
-          x: item.docRect.x - window.scrollX,
-          y: item.docRect.y - window.scrollY,
-          width: item.docRect.width,
-          height: item.docRect.height,
-        }
-      }
-      if (!rect) return
+      if (!item.selector) return
+      const info = infoOf(item.selector)
+      if (!info) return
       const box = document.createElement('div')
       box.style.cssText = 'position:fixed;outline:2px solid #4D6BFE;outline-offset:2px;background:rgba(77,107,254,.14);border-radius:3px;box-sizing:border-box;pointer-events:none;'
-      setBox(box, rect)
+      setBox(box, info.rect)
       pinnedLayer.appendChild(box)
     })
+    drawMarquee()
   }
 
   /** 点到的元素上已经有批注？用选择器回匹配元素本身，选择器后来变了也还能认出来。 */
@@ -379,6 +530,10 @@ export function bridgeMain() {
   }
 
   document.addEventListener('mousemove', (event) => {
+    if (boxDrag) {
+      updateBoxDrag(event.clientX, event.clientY)
+      return
+    }
     if (mode === 'idle') return
     if (drag) {
       drag.x1 = event.clientX
@@ -391,6 +546,21 @@ export function bridgeMain() {
 
   document.addEventListener('mousedown', (event) => {
     if (mode === 'idle') return
+    const part = event.target && event.target.closest ? event.target.closest('[data-ha-part]') : null
+    if (part) {
+      // 点在选框本体 / 手柄 / 删除按钮上：不进页面选区逻辑，改框
+      event.preventDefault()
+      event.stopPropagation()
+      const kind = part.getAttribute('data-ha-part')
+      if (kind === 'del') {
+        clearBox(true)
+        return
+      }
+      const rect = viewportRectOfBox()
+      if (!rect) return
+      boxDrag = { kind: kind === 'move' ? 'move' : 'resize', dir: kind, sx: event.clientX, sy: event.clientY, rect }
+      return
+    }
     event.preventDefault()
     event.stopPropagation()
     if (mode === 'rect' || event.shiftKey) {
@@ -404,6 +574,13 @@ export function bridgeMain() {
   }, true)
 
   document.addEventListener('mouseup', (event) => {
+    if (boxDrag) {
+      event.preventDefault()
+      event.stopPropagation()
+      boxDrag = null
+      flushArea()
+      return
+    }
     if (mode === 'idle') return
     // 页面自己的 mouseup 处理（拖拽结束之类）也别跑
     event.stopPropagation()
@@ -415,11 +592,17 @@ export function bridgeMain() {
     drag = null
     setBox(dragBox, null)
     if (rect.width < 8 || rect.height < 8) {
+      if (mode === 'rect') {
+        // 框选模式下点了一下没拖：保持原来的框，不当成点选元素
+        drawMarquee()
+        return
+      }
       pick(event)
       return
     }
     draftSelector = null
-    // 区域按文档坐标记下，滚动时选框跟着页面走
+    // 区域按文档坐标记下，滚动时选框跟着页面走；boxId 让外层知道这是同一条草稿在改尺寸
+    boxSeq += 1
     pinned = [{
       docRect: {
         x: rect.x + window.scrollX,
@@ -427,13 +610,36 @@ export function bridgeMain() {
         width: rect.width,
         height: rect.height,
       },
+      boxId: boxSeq,
     }]
-    renderPinned()
-    send({ type: 'area', payload: { rect, items: collectArea(rect) } })
+    drawMarquee()
+    send({ type: 'area', payload: areaPayload(rect) })
   }, true)
 
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') send({ type: 'escape' })
+    if (event.key === 'Escape') {
+      send({ type: 'escape' })
+      return
+    }
+    if (mode === 'idle' || curBoxKind() !== 'area') return
+    if (event.key === 'Delete' || event.key === 'Backspace') {
+      event.preventDefault()
+      clearBox(true)
+      return
+    }
+    const step = event.shiftKey ? 10 : 1
+    let dx = 0
+    let dy = 0
+    if (event.key === 'ArrowLeft') dx = -step
+    else if (event.key === 'ArrowRight') dx = step
+    else if (event.key === 'ArrowUp') dy = -step
+    else if (event.key === 'ArrowDown') dy = step
+    else return
+    const rect = viewportRectOfBox()
+    if (!rect) return
+    event.preventDefault()
+    applyBoxRect({ x: rect.x + dx, y: rect.y + dy, width: rect.width, height: rect.height })
+    flushArea()
   }, true)
 
   // 批注模式吃下页面自己的交互：按钮不响应、链接不跳转、表单不提交。
@@ -471,6 +677,7 @@ export function bridgeMain() {
         pinned = []
         renderPinned()
       }
+      drawMarquee()
       send({ type: 'mode-changed', mode })
     } else if (data.type === 'marks') {
       marks = Array.isArray(data.items) ? data.items : []
@@ -501,12 +708,13 @@ export function bridgeMain() {
       scrollFrame = 0
       renderMarks()
       renderPinned()
+      drawMarquee()
       syncDraft()
       reportScroll()
     })
   }
 
   window.addEventListener('scroll', onScroll, true)
-  window.addEventListener('resize', () => { renderMarks(); renderPinned(); syncDraft() })
+  window.addEventListener('resize', () => { renderMarks(); renderPinned(); drawMarquee(); syncDraft() })
   send({ type: 'ready', href: String(window.location.href || '').slice(0, 512) })
 }

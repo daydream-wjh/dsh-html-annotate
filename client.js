@@ -68,6 +68,8 @@ window.__ModuleLoader__.load({
         'element': '元素',
         'reload': '重新读取',
         'mode.title': '批注模式：左键点击元素；按住 Ctrl/Cmd 点击可多选；Shift+拖动框选',
+        'mode.rectTitle': '框选模式：拖出一个框；框画好后可以直接拖动、拉八个角改大小、方向键微调（Shift+方向键 10px）、Delete 删除',
+        'aria.rect': '框选区域',
         'loading': '读取页面中…',
         'bubble.drag': '按住这里可以拖动气泡',
         'preview.title': '看清将要发给 AI 的完整内容',
@@ -158,6 +160,8 @@ window.__ModuleLoader__.load({
         'element': 'Element',
         'reload': 'Re-read file',
         'mode.title': 'Annotation mode: click an element; hold Ctrl/Cmd to multi-select; Shift+drag to box a region',
+        'mode.rectTitle': 'Region mode: drag to draw a box. Then drag it, pull the eight handles to resize, arrow keys to nudge (Shift = 10px), Delete to remove',
+        'aria.rect': 'Region selection',
         'loading': 'Reading page…',
         'bubble.drag': 'Drag here to move the bubble',
         'preview.title': 'See exactly what will be sent to the AI',
@@ -613,7 +617,7 @@ window.__ModuleLoader__.load({
           .map(cleanItem)
           .filter(Boolean)
           .slice(0, UPSTREAM_LIMITS.areaItems)
-        return { type: 'area', rect, items, page }
+        return { type: 'area', rect, items, page, boxId: cleanText(payload.boxId, 24) }
       }
       if (data.type === 'draft-rect') {
         const rect = cleanRect(data.rect)
@@ -675,6 +679,13 @@ window.__ModuleLoader__.load({
         }
       }
       if (message.type === 'area') {
+        // 同一个框被拖动或改了大小：只更新几何和框内元素，已经写好的备注/样式目标留着
+        if (current && current.kind === 'area' && message.boxId && current.boxId === message.boxId) {
+          return {
+            draft: { ...current, items: message.items, rect: message.rect },
+            toast: '',
+          }
+        }
         if (occupied) return reject
         return {
           draft: {
@@ -682,6 +693,7 @@ window.__ModuleLoader__.load({
             kind: 'area',
             items: message.items,
             rect: message.rect,
+            boxId: message.boxId || '',
             note: '',
             styleTargets: {},
           },
@@ -1291,7 +1303,11 @@ window.__ModuleLoader__.load({
             post({ type: 'scroll-to-y', y: scrollRef.current })
             return
           }
-          if (message.type === 'multi' || message.type === 'area') {
+          // 同一个框被拖动/缩放时每秒会来几十条几何更新：这不是新的选择，走限速会卡住框
+          const sameBox = message.type === 'area'
+            && draftRef.current && draftRef.current.kind === 'area'
+            && message.boxId && draftRef.current.boxId === message.boxId
+          if (!sameBox && (message.type === 'multi' || message.type === 'area')) {
             const now = Date.now()
             const gate = upstreamRef.current
             gate.at = gate.at.filter((time) => now - time < UPSTREAM_RATE.windowMs)
@@ -1346,6 +1362,14 @@ window.__ModuleLoader__.load({
             setPreviewOpen(false)
             setListOpen(false)
             return
+          }
+          // 又画了一个新框：上一条还没发出去的框选批注先落盘，不然新框会被「草稿已占用」挡住
+          if (message.type === 'area' && message.boxId && draftRef.current
+            && draftRef.current.kind === 'area'
+            && draftRef.current.boxId !== message.boxId
+            && draftOccupied(draftRef.current)) {
+            setAnnotations((list) => mergeDraft(list, draftRef.current))
+            draftRef.current = null
           }
           const decision = decideUpstream(draftRef.current, message, Date.now())
           if (decision.toast) {
@@ -1565,6 +1589,16 @@ window.__ModuleLoader__.load({
                 setMode(mode === 'annotate' ? 'idle' : 'annotate')
               },
             }, '✎'),
+            h('button', {
+              style: mode === 'rect' ? { ...UI.toolButton, ...UI.toolButtonActive } : UI.toolButton,
+              title: T('mode.rectTitle'),
+              'aria-label': T('aria.rect'),
+              'aria-pressed': mode === 'rect',
+              onClick: () => {
+                setListOpen(false)
+                setMode(mode === 'rect' ? 'idle' : 'rect')
+              },
+            }, '⬚'),
             h('button', {
               style: listOpen ? { ...UI.toolButton, ...UI.toolButtonActive } : UI.toolButton,
               title: T('panel.tooltip', { n: pendingCount }),

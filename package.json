@@ -15,11 +15,11 @@
   "author": "czxgg0630",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/czxgg0630/dsh-html-annotate.git"
+    "url": "git+https://github.com/daydream-wjh/dsh-html-annotate.git"
   },
-  "homepage": "https://github.com/czxgg0630/dsh-html-annotate#readme",
+  "homepage": "https://github.com/daydream-wjh/dsh-html-annotate#readme",
   "bugs": {
-    "url": "https://github.com/czxgg0630/dsh-html-annotate/issues"
+    "url": "https://github.com/daydream-wjh/dsh-html-annotate/issues"
   },
   "exports": {
     ".": "./index.js",
