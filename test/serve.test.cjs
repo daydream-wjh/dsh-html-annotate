@@ -100,11 +100,58 @@ test('路由：HTML 响应注入桥，其他文件按 MIME 原样发', async () 
   assert.strictEqual(html.res.statusCode, 200)
   assert.ok(html.body.includes('html-annotate/bridge.js'), 'HTML 应带桥脚本')
 
+  // .css 现在按代码页渲染（可框选某一行），样式表本体走 ?raw=1
   const css = fakeExchange('/html-annotate/s/s1/assets/app.css')
   await handler(css.req, css.res)
   assert.strictEqual(css.res.statusCode, 200)
-  assert.strictEqual(css.headers['content-type'], 'text/css; charset=utf-8')
-  assert.strictEqual(css.body, 'body{color:red}')
+  assert.strictEqual(css.headers['content-type'], 'text/html; charset=utf-8')
+  assert.ok(css.body.includes('ha-ln'), 'CSS 应渲染成带行号的代码页')
+  assert.ok(css.body.includes('body{color:red}'))
+
+  const raw = fakeExchange('/html-annotate/s/s1/assets/app.css?raw=1')
+  await handler(raw.req, raw.res)
+  assert.strictEqual(raw.headers['content-type'], 'text/css; charset=utf-8')
+  assert.strictEqual(raw.body, 'body{color:red}')
+})
+
+test('路由：Markdown / CSV / 图片 各自渲染成可批注的页面', async () => {
+  const files = {
+    'notes/todo.md': Buffer.from('# 标题\n\n- 一\n- 二\n\n```js\nlet a = 1\n```\n'),
+    'data/list.csv': Buffer.from('name,qty\napple,3\npear,5\n'),
+    'img/cover.png': Buffer.from([0x89, 0x50, 0x4e, 0x47]),
+  }
+  const handler = serve.createPreviewHandler({
+    sessions: { get: () => ({ header: { cwd: '/workspace' } }) },
+    workspaceFiles: {
+      readBytes: async (scope, path) => {
+        const found = files[path]
+        if (!found) throw new Error('missing')
+        return { absolutePath: '/workspace/' + path, version: 'v1', offset: 0, data: new Uint8Array(found), eof: true }
+      },
+    },
+  })
+
+  const md = fakeExchange('/html-annotate/s/s1/notes/todo.md')
+  await handler(md.req, md.res)
+  assert.ok(md.body.includes('<h1 data-ha-src="L1">'), '标题应带源码行号')
+  assert.ok(md.body.includes('<li data-ha-src="L3">'), '列表项应带源码行号')
+  assert.ok(md.body.includes('data-lang="js"'), '代码块应保留语言')
+  assert.ok(md.body.includes('html-annotate/bridge.js'), 'Markdown 页也要挂桥')
+
+  const csv = fakeExchange('/html-annotate/s/s1/data/list.csv')
+  await handler(csv.req, csv.res)
+  assert.ok(csv.body.includes('<th>name</th>'), 'CSV 应渲染成表头')
+  assert.ok(csv.body.includes('<tr data-ha-src="L2">'), '数据行应带行号')
+
+  const img = fakeExchange('/html-annotate/s/s1/img/cover.png')
+  await handler(img.req, img.res)
+  assert.ok(img.body.includes('<img id="ha-image"'), '图片应包进可批注的壳')
+  assert.ok(img.body.includes('?raw=1'), '图片本体走 raw 通道')
+
+  const rawImg = fakeExchange('/html-annotate/s/s1/img/cover.png?raw=1')
+  await handler(rawImg.req, rawImg.res)
+  assert.strictEqual(rawImg.headers['content-type'], 'image/png')
+  assert.strictEqual(rawImg.headers['access-control-allow-origin'], '*')
 })
 
 test('路由：桥脚本按脚本发，HEAD 不回 body', async () => {

@@ -329,7 +329,7 @@ test('文案表：中英键集合一致', () => {
 
 test('文案表：缺省回退中文并替换占位符', () => {
   const api = T()
-  assert.strictEqual(api.T('title'), 'HTML 批注')
+  assert.strictEqual(api.T('title'), '批注预览')
   assert.strictEqual(api.T('panel.head', { n: 2 }), '批注 · 2 条')
   assert.strictEqual(api.T('send'), '发送')
   assert.strictEqual(api.T('send', { n: 3 }), '发送')

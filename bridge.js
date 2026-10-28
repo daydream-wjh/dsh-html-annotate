@@ -119,8 +119,43 @@ export function bridgeMain() {
     return item && item.docRect ? item.boxId || 0 : 0
   }
 
-  function areaPayload(rect) {
+  /** 框压在 <img> 上时，把屏幕坐标换成原图像素，AI 拿着这组数就能自己裁。 */
+  function imageUnderBox(rect) {
+    let best = null
+    const images = document.images || []
+    for (let i = 0; i < images.length; i += 1) {
+      const img = images[i]
+      const box = img.getBoundingClientRect()
+      if (!box.width || !box.height) continue
+      const left = Math.max(rect.x, box.left)
+      const top = Math.max(rect.y, box.top)
+      const right = Math.min(rect.x + rect.width, box.right)
+      const bottom = Math.min(rect.y + rect.height, box.bottom)
+      const width = right - left
+      const height = bottom - top
+      if (width < 4 || height < 4) continue
+      if (!best || width * height > best.area) best = { img, box, left, top, width, height, area: width * height }
+    }
+    if (!best) return null
+    const naturalWidth = best.img.naturalWidth || Math.round(best.box.width)
+    const naturalHeight = best.img.naturalHeight || Math.round(best.box.height)
+    const scaleX = best.box.width ? naturalWidth / best.box.width : 1
+    const scaleY = best.box.height ? naturalHeight / best.box.height : 1
+    let hit = null
+    try { hit = selectorOf(best.img) } catch (error) { hit = '' }
     return {
+      selector: hit,
+      x: Math.max(0, Math.round((best.left - best.box.left) * scaleX)),
+      y: Math.max(0, Math.round((best.top - best.box.top) * scaleY)),
+      width: Math.round(best.width * scaleX),
+      height: Math.round(best.height * scaleY),
+      naturalWidth,
+      naturalHeight,
+    }
+  }
+
+  function areaPayload(rect) {
+    const payload = {
       rect: {
         x: Math.round(rect.x),
         y: Math.round(rect.y),
@@ -130,6 +165,9 @@ export function bridgeMain() {
       items: collectArea(rect),
       boxId: currentBoxId(),
     }
+    const image = imageUnderBox(rect)
+    if (image) payload.image = image
+    return payload
   }
 
   function flushArea() {
@@ -299,6 +337,19 @@ export function bridgeMain() {
     return styles
   }
 
+  /** 渲染页给每个块挂了 data-ha-src="L12-L18"：往上找一层，正好指回源文件的行。 */
+  function srcOf(el) {
+    let node = el
+    for (let depth = 0; node && depth < 6; depth += 1) {
+      if (node.getAttribute) {
+        const value = node.getAttribute('data-ha-src')
+        if (value) return String(value).slice(0, 32)
+      }
+      node = node.parentElement
+    }
+    return ''
+  }
+
   function describe(el) {
     const text = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 200)
     return {
@@ -309,6 +360,7 @@ export function bridgeMain() {
       text,
       styles: stylesOf(el),
       rect: rectOf(el),
+      src: srcOf(el),
     }
   }
 

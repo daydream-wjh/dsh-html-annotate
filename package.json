@@ -1,15 +1,18 @@
 {
   "name": "dsh-html-annotate",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "scripts": {
     "test": "node --test test/"
   },
   "type": "module",
-  "description": "右侧栏 HTML 批注预览：点选元素或框选区域写批注，直接发进当前会话让 AI 改",
+  "description": "右侧栏文件批注预览：HTML / Markdown / 代码 / CSV / 图片 / SVG 都能点选或框选写批注，直接发进当前会话让 AI 改",
   "keywords": [
     "dsh-plugin",
     "annotation",
     "html-preview",
+    "markdown",
+    "code-preview",
+    "image-crop",
     "sidebar"
   ],
   "author": "czxgg0630",

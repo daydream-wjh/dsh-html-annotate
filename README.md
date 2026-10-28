@@ -110,6 +110,22 @@ Replace `web` with the profile you actually run. The Host half registers its pre
 
 In the desktop app, open **Plugins → Add plugin** and enter `dsh-html-annotate`.
 
+## Supported formats
+
+| Kind | Extensions | Preview | What a pick lands on |
+| --- | --- | --- | --- |
+| HTML | `.html` `.htm` | rendered as is | DOM elements |
+| Markdown | `.md` `.markdown` `.mdx` … | rendered document | headings / paragraphs / list items / table rows, **with source line numbers** |
+| Text · code | `.txt` `.log` `.js` `.ts` `.py` `.go` … | code page with line numbers | single lines |
+| Tables | `.csv` `.tsv` | table | rows (with source line numbers) |
+| Data | `.json` `.yaml` `.toml` … | formatted code page | single lines |
+| SVG | `.svg` | inlined vector | individual shapes |
+| Images | `.png` `.jpg` `.jpeg` `.webp` `.gif` `.bmp` | the image | **a box → natural-pixel crop rect** |
+
+A box drawn on an image is converted to natural pixels (`x / y / width / height` plus the image size) and sent along, so the model can crop that region from the file itself — no screenshot channel needed.
+Every Markdown / code / CSV block carries `data-ha-src="L12-L18"`, so annotations name the source lines instead of guessing.
+
+
 ## Usage
 
 1. Open an `.html` file from the Files panel in the left sidebar, or click a file link in the chat. The tab shows up for session-bound addresses; unbound addresses such as `absolute/...` keep going to the built-in preview.
@@ -133,6 +149,8 @@ A typical instruction after a few annotations:
 - Sending is always a button press. The plugin never writes to the session on its own.
 
 ## Known limitations
+
+- PDF, Word, Excel and PowerPoint are out of scope: the built-in preview keeps them. This plugin only claims formats it can turn into an annotatable DOM.
 
 - The frame is sandboxed without `allow-same-origin`, so `sessionStorage` / `localStorage` throw inside it. Pages that persist state there degrade to in-memory; pages that read them without a `try/catch` lose that handler.
 - Only files under the session's workspace root are served. Absolute-path addresses (`absolute/...`) keep going to the built-in preview, which is a static snapshot and does not run page scripts the same way.
